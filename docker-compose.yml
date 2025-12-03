@@ -1,0 +1,181 @@
+version: '3.8'
+
+services:
+  # --- Infrastructure ---
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: therapy_rabbitmq
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - therapy_network
+
+  minio:
+    image: minio/minio:latest
+    container_name: therapy_minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000" # API
+      - "9001:9001" # Console
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    networks:
+      - therapy_network
+
+  postgres:
+    image: postgres:15
+    container_name: therapy_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - therapy_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: therapy_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - therapy_network
+
+  datadog:
+    image: gcr.io/datadoghq/agent:7
+    container_name: therapy_datadog
+    environment:
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_SITE=datadoghq.com
+      - DD_LOGS_ENABLED=true
+      - DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL=true
+      - DD_CONTAINER_EXCLUDE_LOGS=gcr.io/datadoghq/agent
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
+    networks:
+      - therapy_network
+    depends_on:
+      - rabbitmq
+      - postgres
+      - redis
+
+  # --- Microservices (To be built) ---
+  ingestion_service:
+    build:
+      context: .
+      dockerfile: ./services/ingestion/Dockerfile
+    container_name: therapy_ingestion
+    ports:
+      - "8000:8000"
+    depends_on:
+      - rabbitmq
+      - minio
+    env_file: .env
+    environment:
+      SERVICE_NAME: ingestion_service
+    networks:
+      - therapy_network
+    profiles:
+      - services
+
+  audio_service:
+    build:
+      context: .
+      dockerfile: ./services/audio_extractor/Dockerfile
+    container_name: therapy_audio
+    depends_on:
+      - rabbitmq
+      - minio
+    env_file: .env
+    environment:
+      SERVICE_NAME: audio_extractor_service
+    networks:
+      - therapy_network
+    profiles:
+      - services
+
+  transcription_service:
+    build:
+      context: .
+      dockerfile: ./services/transcription/Dockerfile
+    container_name: therapy_transcription
+    depends_on:
+      - rabbitmq
+      - minio
+    env_file: .env
+    environment:
+      SERVICE_NAME: transcription_service
+    networks:
+      - therapy_network
+    profiles:
+      - services
+
+  analyzer_service:
+    build:
+      context: .
+      dockerfile: ./services/analyzer/Dockerfile
+    container_name: therapy_analyzer
+    depends_on:
+      - rabbitmq
+      - postgres
+      - redis
+    env_file: .env
+    environment:
+      SERVICE_NAME: analyzer_service
+    networks:
+      - therapy_network
+    profiles:
+      - services
+
+  reporting_service:
+    build:
+      context: .
+      dockerfile: ./services/reporting/Dockerfile
+    container_name: therapy_reporting
+    ports:
+      - "8001:8000"
+    depends_on:
+      - postgres
+    env_file: .env
+    environment:
+      SERVICE_NAME: reporting_service
+    networks:
+      - therapy_network
+    profiles:
+      - services
+
+volumes:
+  minio_data:
+  postgres_data:
+
+networks:
+  therapy_network:
+    driver: bridge

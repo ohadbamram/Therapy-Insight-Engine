@@ -205,3 +205,37 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+# instructions
+copilot-instructions
+instructions.instructions.md
+.github/copilot-instructions.md
+
+# Project local files and OS/IDE artifacts
+# Local env overrides
+.env.local
+.env.*.local
+
+# Docker compose local override
+docker-compose.override.yml
+
+# IDE/editor folders
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+logs/
+
+# SSL / keys (local testing)
+*.pem
+*.key
+*.crt
+
+# Wheel metadata created during builds
+pip-wheel-metadata/
