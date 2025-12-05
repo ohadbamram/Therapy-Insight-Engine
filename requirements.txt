@@ -1,6 +1,6 @@
 fastapi
 uvicorn[standard]
-faststream[rabbit]
+faststream[rabbit,cli]
 minio
 redis
 asyncpg

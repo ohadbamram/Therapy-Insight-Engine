@@ -16,8 +16,15 @@ logger = get_logger(__name__)
 app = FastAPI(title="Therapy Ingestion Service")
 
 # Connection Details (From Environment Variables)
-RABBITMQ_URL = os.getenv("RABBITMQ_URL")
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")
+RABBITMQ_USER = os.getenv('RABBITMQ_USER')
+RABBITMQ_PASSWORD = os.getenv('RABBITMQ_PASSWORD')
+RABBITMQ_HOST = os.getenv('RABBITMQ_HOST')
+RABBITMQ_PORT = os.getenv('RABBITMQ_PORT')
+RABBITMQ_VHOST = os.getenv('RABBITMQ_VHOST')
+RABBITMQ_URL = f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASSWORD}@{RABBITMQ_HOST}:{RABBITMQ_PORT}{RABBITMQ_VHOST}"
+MINIO_HOST = os.getenv('MINIO_HOST')
+MINIO_PORT = os.getenv('MINIO_PORT')
+MINIO_ENDPOINT = f"{MINIO_HOST}:{MINIO_PORT}"
 MINIO_ACCESS_KEY = os.getenv("MINIO_ROOT_USER")
 MINIO_SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD")
 

@@ -39,6 +39,7 @@ class TranscriptReady(BaseModel):
     This event triggers the analysis pipeline with Gemini LLM.
     """
     video_id: UUID = Field(..., description="Reference to the original video")
+    transcript_text: str = Field(..., description="The full raw text of the transcription")
     transcript_json: Dict[str, Any] = Field(..., description="Full transcript from AssemblyAI including speaker labels")
     speaker_segments: Optional[Dict[str, Any]] = Field(None, description="Parsed speaker segments with timestamps")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Event timestamp")
