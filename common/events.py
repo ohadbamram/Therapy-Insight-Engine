@@ -5,10 +5,9 @@ These Pydantic models define the contract for asynchronous event communication
 across the therapy-insight-engine microservices architecture.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from uuid import UUID
-
 from pydantic import BaseModel, Field
 
 
@@ -20,8 +19,7 @@ class VideoUploaded(BaseModel):
     video_id: UUID = Field(..., description="Unique identifier for the video")
     filename: str = Field(..., description="Original filename of the uploaded video")
     minio_path: str = Field(..., description="Path to the video in MinIO storage")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Event timestamp")
-
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Event timestamp")
 
 class AudioExtracted(BaseModel):
     """Event emitted when audio has been extracted from a video.
@@ -31,7 +29,7 @@ class AudioExtracted(BaseModel):
     video_id: UUID = Field(..., description="Reference to the original video")
     audio_path: str = Field(..., description="Path to the extracted audio file in MinIO")
     duration_seconds: Optional[float] = Field(None, description="Duration of the extracted audio")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Event timestamp")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Event timestamp")
 
 
 class TranscriptReady(BaseModel):
@@ -42,7 +40,7 @@ class TranscriptReady(BaseModel):
     video_id: UUID = Field(..., description="Reference to the original video")
     transcript_json: Dict[str, Any] = Field(..., description="Full transcript from AssemblyAI including speaker labels")
     speaker_segments: Optional[Dict[str, Any]] = Field(None, description="Parsed speaker segments with timestamps")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Event timestamp")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Event timestamp")
 
     class Config:
         """Pydantic configuration for TranscriptReady."""
