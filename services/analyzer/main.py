@@ -43,36 +43,60 @@ redis = aioredis.from_url(REDIS_URL, decode_responses=True)
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # --- Data Models for AI Output ---
+class SentimentPoint(BaseModel):
+    time: float = Field(..., description="Timestamp in seconds")
+    score: float = Field(..., description="Sentiment score from -1.0 to 1.0")
 class AnalysisResult(BaseModel):
-    model_config = ConfigDict(
-        json_schema_extra=lambda schema, model: schema.pop('additionalProperties', None)
-    )
+    model_config = ConfigDict(extra='forbid')
     speaker_role: str = Field(..., description="The role of the speaker: 'therapist' or 'patient'")
     topic: str = Field(..., description="Primary topic (e.g., Anxiety, Family, Work)")
     emotion: str = Field(..., description="Emotional tone (e.g., Sad, Happy, Neutral)")
     confidence: float
 
 class FullAnalysis(BaseModel):
-    model_config = ConfigDict(
-        json_schema_extra=lambda schema, model: schema.pop('additionalProperties', None)
-    )
+    model_config = ConfigDict(extra='forbid')
     video_id: str = Field(default="") # Filled in after AI generation
     segments: list[AnalysisResult]
     summary: str
-    sentiment_trend: list[dict] # [{"time": 10.5, "score": -1}]
+    sentiment_trend: list[SentimentPoint]
 
 # --- Helpers ---
+def get_clean_schema(model_class):
+    """
+    Adapter function: Converts a Pydantic Model into a Gemini-compatible JSON Schema.
+    It recursively removes the 'additionalProperties' key which Gemini prohibits.
+    """
+    schema = model_class.model_json_schema()
+    
+    def strip_forbidden_keys(d):
+        if isinstance(d, dict):
+            # Gemini forbids 'additionalProperties', so we remove it if found
+            if "additionalProperties" in d:
+                del d["additionalProperties"]
+            # Recursively clean nested dictionaries
+            for v in d.values():
+                strip_forbidden_keys(v)
+        elif isinstance(d, list):
+            # Recursively clean lists
+            for item in d:
+                strip_forbidden_keys(item)
+    
+    strip_forbidden_keys(schema)
+    return schema
+
 async def save_to_postgres(analysis: FullAnalysis):
     """Save the structured analysis to the database."""
     conn = await asyncpg.connect(POSTGRES_URL)
     try:
+        # Convert list of Pydantic models to list of dicts for JSON serialization
+        sentiment_json = json.dumps([p.model_dump() for p in analysis.sentiment_trend])
         # Save Summary (Upsert using ON CONFLICT)
         await conn.execute("""
             INSERT INTO analysis_summary (video_id, sentiment_trend, summary_text)
             VALUES ($1, $2, $3)
             ON CONFLICT (video_id) DO UPDATE 
             SET summary_text = $3
-        """, analysis.video_id, json.dumps(analysis.sentiment_trend), analysis.summary)
+        """, analysis.video_id, sentiment_json, analysis.summary)
 
         # Save Segments
         # In production, use executemany for batch inserts
@@ -121,18 +145,22 @@ async def handle_transcript(event: TranscriptReady, msg: RabbitMessage):
         - For 'sentiment_trend', map emotions to a score between -1.0 (very negative) and 1.0 (very positive).
         """
 
+        # Use Adapter to get clean schema
+        clean_schema = get_clean_schema(FullAnalysis)
+
         # Call the LLM with JSON Schema enforcement
         response = await client.aio.models.generate_content(
             model=LLM, 
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                response_schema=FullAnalysis,
+                response_schema=clean_schema,
                 system_instruction=system_instruction,
             ),
         )
         
-        result: FullAnalysis = response.parsed
+        # Manually parse the response (since we passed a dict schema)   
+        result = FullAnalysis.model_validate_json(response.text)
         result.video_id = str(event.video_id) # Inject ID from event
 
         # Save to DB
