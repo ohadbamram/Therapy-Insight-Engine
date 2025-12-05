@@ -90,6 +90,9 @@ async def save_to_postgres(analysis: FullAnalysis):
 async def handle_transcript(event: TranscriptReady, msg: RabbitMessage):
     logger.info("analysis_started", video_id=str(event.video_id))
     
+    if not event.transcript_text or not event.transcript_text.strip():
+        logger.warning("analysis_skipped_empty_transcript", video_id=str(event.video_id))
+        return # This ACKs the message (removes it from queue)
     # Check Redis Cache
     # We hash the transcript text to create a unique content-based key
     transcript_hash = hashlib.sha256(event.transcript_text.encode()).hexdigest()
