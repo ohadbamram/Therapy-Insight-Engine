@@ -20,6 +20,7 @@ class VideoUploaded(BaseModel):
     filename: str = Field(..., description="Original filename of the uploaded video")
     minio_path: str = Field(..., description="Path to the video in MinIO storage")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Event timestamp")
+    content_type: str = Field(..., description="MIME type of the uploaded file")
 
 class AudioExtracted(BaseModel):
     """Event emitted when audio has been extracted from a video.
@@ -42,7 +43,7 @@ class TranscriptReady(BaseModel):
     speaker_segments: Optional[Dict[str, Any]] = Field(None, description="Parsed speaker segments with timestamps")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Event timestamp")
 
-    class Config:
+    class ConfigDict:
         """Pydantic configuration for TranscriptReady."""
         json_schema_extra = {
             "example": {
