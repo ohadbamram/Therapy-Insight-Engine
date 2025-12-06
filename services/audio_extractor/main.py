@@ -1,6 +1,7 @@
 import os
 import asyncio
 import ffmpeg
+from contextlib import asynccontextmanager
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker, RabbitQueue, RabbitMessage
 from minio import Minio
@@ -27,6 +28,17 @@ MINIO_SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD")
 # Setup Dependencies
 broker = RabbitBroker(RABBITMQ_URL)
 app = FastStream(broker)
+
+@app.on_startup
+async def setup_bucket():
+    try:
+        # Run blocking MinIO calls in a thread
+        exists = await asyncio.to_thread(minio_client.bucket_exists, "audio")
+        if not exists:
+            await asyncio.to_thread(minio_client.make_bucket, "audio")
+            logger.info("bucket_created", bucket="audio")
+    except Exception as e:
+        logger.error("bucket_creation_failed", error=str(e))
 
 minio_client = Minio(
     MINIO_ENDPOINT,
