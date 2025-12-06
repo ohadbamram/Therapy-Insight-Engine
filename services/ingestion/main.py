@@ -1,6 +1,7 @@
 import uuid
 import os
 import asyncio
+import asyncpg
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from faststream.rabbit import RabbitBroker, RabbitQueue
 from minio import Minio
@@ -27,6 +28,12 @@ MINIO_PORT = os.getenv('MINIO_PORT')
 MINIO_ENDPOINT = f"{MINIO_HOST}:{MINIO_PORT}"
 MINIO_ACCESS_KEY = os.getenv("MINIO_ROOT_USER")
 MINIO_SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD")
+POSTGRES_USER = os.environ["POSTGRES_USER"]
+POSTGRES_PASSWORD = os.environ["POSTGRES_PASSWORD"]
+POSTGRES_DB = os.environ["POSTGRES_DB"]
+POSTGRES_HOST = os.getenv("POSTGRES_HOST")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT") 
+POSTGRES_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
 # Setup Connections
 broker = RabbitBroker(RABBITMQ_URL)
@@ -80,7 +87,16 @@ async def upload_video(file: UploadFile = File(...)):
     
     logger.info("upload_started", video_id=video_id, filename=file.filename)
 
+    # Connect to Postgres
+    conn = await asyncpg.connect(POSTGRES_URL)
+
     try:
+        # Save metadata to Postgres
+        await conn.execute("""
+            INSERT INTO videos (id, filename, minio_path, status)
+            VALUES ($1, $2, $3, 'processing')
+        """, video_id, file.filename, file_path)
+
         # Save file to MinIO
         await asyncio.to_thread(
             minio_client.put_object,
@@ -108,3 +124,6 @@ async def upload_video(file: UploadFile = File(...)):
     except Exception as e:
         logger.error("upload_failed", error=str(e), video_id=video_id)
         raise HTTPException(status_code=500, detail="Upload failed")
+    
+    finally:
+        await conn.close()

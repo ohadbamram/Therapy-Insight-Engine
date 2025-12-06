@@ -14,7 +14,8 @@ def mock_dependencies():
     in the main.py file for every test function.
     """
     with patch("services.ingestion.main.broker") as mock_broker, \
-         patch("services.ingestion.main.minio_client") as mock_minio:
+         patch("services.ingestion.main.minio_client") as mock_minio, \
+         patch("services.ingestion.main.asyncpg.connect") as mock_pg_connect:
         
         # Setup RabbitMQ Mocks
         mock_broker.connect = AsyncMock()
@@ -28,13 +29,17 @@ def mock_dependencies():
         mock_minio.make_bucket = MagicMock()
         mock_minio.put_object = MagicMock()
 
-        yield mock_broker, mock_minio
+        # Setup Postgres Mocks
+        mock_conn = AsyncMock()
+        mock_pg_connect.return_value = mock_conn
+
+        yield mock_broker, mock_minio, mock_pg_connect
 
 def test_upload_video_success(mock_dependencies):
     """
     Happy Path: User uploads file -> Saved to MinIO -> Event Published -> 200 OK
     """
-    mock_broker, mock_minio = mock_dependencies
+    mock_broker, mock_minio, mock_pg_connect = mock_dependencies
 
     # Simulate a file upload
     file_content = b"fake video content"
@@ -56,7 +61,15 @@ def test_upload_video_success(mock_dependencies):
     
     # Verify RabbitMQ publish was called
     mock_broker.publish.assert_called_once()
-    
+
+    # Verify we tried to save to DB
+    mock_pg_connect.assert_called() # Connection happened
+    mock_pg_connect.return_value.execute.assert_called() # Query executed
+
+    # Verify the SQL contained "INSERT INTO videos"
+    args, _ = mock_pg_connect.return_value.execute.call_args
+    assert "INSERT INTO videos" in args[0]
+
     # Inspect the event sent to RabbitMQ
     # args[0] is the event object passed to publish()
     published_event = mock_broker.publish.call_args[0][0]
@@ -67,7 +80,7 @@ def test_upload_minio_failure(mock_dependencies):
     """
     Error Path: MinIO fails (e.g., network error) -> API returns 500
     """
-    mock_broker, mock_minio = mock_dependencies
+    mock_broker, mock_minio, mock_pg_connect = mock_dependencies
 
     # Configure MinIO mock to raise an exception
     mock_minio.put_object.side_effect = Exception("S3 Connection Failed")
@@ -81,6 +94,9 @@ def test_upload_minio_failure(mock_dependencies):
     assert response.status_code == 500
     assert response.json()["detail"] == "Upload failed"
 
+    # Verify that even if MinIO fails, we likely already inserted the DB row
+    mock_pg_connect.return_value.execute.assert_called()
+
     # Verify we NEVER published to RabbitMQ (fail fast)
     mock_broker.publish.assert_not_called()
 
@@ -88,7 +104,7 @@ def test_lifespan_startup(mock_dependencies):
     """
     Test that startup logic creates buckets and declares queues.
     """
-    mock_broker, mock_minio = mock_dependencies
+    mock_broker, mock_minio, mock_pg_connect = mock_dependencies
     
     # Set bucket_exists to False so we verify make_bucket is called
     mock_minio.bucket_exists.return_value = False

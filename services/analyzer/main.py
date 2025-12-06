@@ -48,6 +48,7 @@ class SentimentPoint(BaseModel):
     score: float = Field(..., description="Sentiment score from -1.0 to 1.0")
 class AnalysisResult(BaseModel):
     model_config = ConfigDict(extra='forbid')
+    text: str = Field(..., description="The exact text content of this segment")
     speaker_role: str = Field(..., description="The role of the speaker: 'therapist' or 'patient'")
     topic: str = Field(..., description="Primary topic (e.g., Anxiety, Family, Work)")
     emotion: str = Field(..., description="Emotional tone (e.g., Sad, Happy, Neutral)")
