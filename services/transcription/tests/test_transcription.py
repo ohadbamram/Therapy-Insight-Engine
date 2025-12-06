@@ -59,9 +59,9 @@ async def test_transcription_success(mock_dependencies, sample_event, mock_rabbi
     mock_minio.fget_object.assert_called_once()
     
     # Verify Transcription Called
-    mock_transcriber.transcribe.assert_called_once()
-    call_args = mock_transcriber.transcribe.call_args
-    assert "speaker_labels=True" in str(call_args)
+    args, _ = mock_transcriber.transcribe.call_args
+    config_object = args[1]
+    assert config_object.speaker_labels is True
     
     # Verify Publish
     mock_broker.publish.assert_awaited_once()
