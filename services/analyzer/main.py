@@ -103,9 +103,9 @@ async def save_to_postgres(analysis: FullAnalysis):
         # In production, use executemany for batch inserts
         for seg in analysis.segments:
             await conn.execute("""
-                INSERT INTO analysis_segments (video_id, speaker_role, topic, emotion, confidence_score)
-                VALUES ($1, $2, $3, $4, $5)
-            """, analysis.video_id, seg.speaker_role, seg.topic, seg.emotion, seg.confidence)
+                INSERT INTO analysis_segments (video_id, speaker_role, text_content, topic, emotion, confidence_score)
+                VALUES ($1, $2, $3, $4, $5, $6)
+            """, analysis.video_id, seg.speaker_role, seg.text, seg.topic, seg.emotion, seg.confidence)
             
     finally:
         await conn.close()

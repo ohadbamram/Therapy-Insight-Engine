@@ -41,6 +41,7 @@ def mock_dependencies():
             "summary": "Patient is sad.",
             "sentiment_trend": [{"time": 0.0, "score": -1.0}],
             "segments": [{
+                "text": "I feel very sad today.",
                 "speaker_role": "patient",
                 "topic": "sadness",
                 "emotion": "sad",
