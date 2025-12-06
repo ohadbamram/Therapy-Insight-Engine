@@ -89,7 +89,9 @@ async def handle_audio_extracted(event: AudioExtracted, msg: RabbitMessage):
         # Publish to the queue that the Analyzer is listening to
         await broker.publish(output_event, queue="transcript_ready")
         
-        logger.info("transcription_complete", video_id=str(event.video_id))
+        logger.info("transcription_complete", 
+            video_id=str(event.video_id), 
+            preview=transcript.text[:200] if transcript.text else "NO TEXT FOUND")
 
     except Exception as e:
         logger.error("transcription_failed", error=str(e), video_id=str(event.video_id))
