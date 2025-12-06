@@ -27,6 +27,7 @@ CREATE TABLE analysis_summary (
     patient_talk_ratio FLOAT,       
     sentiment_trend JSONB, -- e.g. [{"time": 10.5, "score": -1}, {"time": 20.0, "score": 1}]
     summary_text TEXT,
+    recommendations JSONB,
     created_at TIMESTAMP DEFAULT NOW()
 );
 

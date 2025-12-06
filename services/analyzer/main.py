@@ -60,6 +60,7 @@ class FullAnalysis(BaseModel):
     segments: list[AnalysisResult]
     summary: str
     sentiment_trend: list[SentimentPoint]
+    recommendations: list[str] = Field(default=[], description="List of recommendations for the therapist")
 
 # --- Helpers ---
 def get_clean_schema(model_class):
@@ -91,13 +92,15 @@ async def save_to_postgres(analysis: FullAnalysis):
     try:
         # Convert list of Pydantic models to list of dicts for JSON serialization
         sentiment_json = json.dumps([p.model_dump() for p in analysis.sentiment_trend])
+        recommendations_json = json.dumps(analysis.recommendations)
+
         # Save Summary (Upsert using ON CONFLICT)
         await conn.execute("""
-            INSERT INTO analysis_summary (video_id, sentiment_trend, summary_text)
-            VALUES ($1, $2, $3)
+            INSERT INTO analysis_summary (video_id, sentiment_trend, summary_text, recommendations)
+            VALUES ($1, $2, $3, $4)
             ON CONFLICT (video_id) DO UPDATE 
-            SET summary_text = $3
-        """, analysis.video_id, sentiment_json, analysis.summary)
+            SET summary_text = $3, recommendations = $4
+        """, analysis.video_id, sentiment_json, analysis.summary, recommendations_json)
 
         # Save Segments
         # In production, use executemany for batch inserts
@@ -135,6 +138,8 @@ async def handle_transcript(event: TranscriptReady, msg: RabbitMessage):
         1. Identify the 'therapist' and 'patient'.
         2. For every segment, tag the topic and emotion.
         3. Create a sentiment trend (time vs score) and a summary.
+        4. Provide a clinical summary.
+        5. Based on the topics that made the patient feel negative, provide a list of recommendations for the therapist for the next session.
         
         Transcript: {event.transcript_text}
         """
