@@ -39,7 +39,13 @@ def mock_dependencies():
         mock_json_string = json.dumps({
             "video_id": "test_id",
             "summary": "Patient is sad.",
-            "sentiment_trend": [{"time": 0.0, "score": -1.0}],
+            "recommendations": ["Do homework"],
+            "cognitive_distortions": [
+                {"quote": "I am a failure", "distortion_type": "Labeling", "explanation": "Self-labeling"}
+            ],
+            "therapist_interventions": [
+                {"quote": "Tell me more", "technique": "Open Question", "purpose": "Exploration"}
+            ],
             "segments": [{
                 "text": "I feel very sad today.",
                 "speaker_role": "patient",

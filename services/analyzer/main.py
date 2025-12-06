@@ -43,9 +43,19 @@ redis = aioredis.from_url(REDIS_URL, decode_responses=True)
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # --- Data Models for AI Output ---
-class SentimentPoint(BaseModel):
-    time: float = Field(..., description="Timestamp in seconds")
-    score: float = Field(..., description="Sentiment score from -1.0 to 1.0")
+class CognitiveDistortion(BaseModel):
+    model_config = ConfigDict(json_schema_extra=lambda s, m: s.pop('additionalProperties', None))
+    
+    quote: str = Field(..., description="The exact quote from the patient showing the distortion")
+    distortion_type: str = Field(..., description="Type (e.g., Catastrophizing, Mind Reading)")
+    explanation: str = Field(..., description="Brief explanation of why this is a distortion")
+
+class TherapistIntervention(BaseModel):
+    model_config = ConfigDict(json_schema_extra=lambda s, m: s.pop('additionalProperties', None))
+    
+    quote: str = Field(..., description="The exact quote from the therapist")
+    technique: str = Field(..., description="Technique used (e.g., Validation, Open Question)")
+    purpose: str = Field(..., description="The intended therapeutic effect")
 class AnalysisResult(BaseModel):
     model_config = ConfigDict(extra='forbid')
     text: str = Field(..., description="The exact text content of this segment")
@@ -59,8 +69,9 @@ class FullAnalysis(BaseModel):
     video_id: str = Field(default="") # Filled in after AI generation
     segments: list[AnalysisResult]
     summary: str
-    sentiment_trend: list[SentimentPoint]
     recommendations: list[str] = Field(default=[], description="List of recommendations for the therapist")
+    cognitive_distortions: list[CognitiveDistortion] = Field(default=[])
+    therapist_interventions: list[TherapistIntervention] = Field(default=[])
 
 # --- Helpers ---
 def get_clean_schema(model_class):
@@ -91,16 +102,20 @@ async def save_to_postgres(analysis: FullAnalysis):
     conn = await asyncpg.connect(POSTGRES_URL)
     try:
         # Convert list of Pydantic models to list of dicts for JSON serialization
-        sentiment_json = json.dumps([p.model_dump() for p in analysis.sentiment_trend])
         recommendations_json = json.dumps(analysis.recommendations)
+        distortions_json = json.dumps([d.model_dump() for d in analysis.cognitive_distortions])
+        interventions_json = json.dumps([i.model_dump() for i in analysis.therapist_interventions])
 
         # Save Summary (Upsert using ON CONFLICT)
         await conn.execute("""
-            INSERT INTO analysis_summary (video_id, sentiment_trend, summary_text, recommendations)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO analysis_summary (
+                video_id, summary_text, recommendations, cognitive_distortions, therapist_interventions
+            )
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (video_id) DO UPDATE 
-            SET summary_text = $3, recommendations = $4
-        """, analysis.video_id, sentiment_json, analysis.summary, recommendations_json)
+            SET summary_text = $2, recommendations = $3, 
+                cognitive_distortions = $4, therapist_interventions = $5
+        """, analysis.video_id, analysis.summary, recommendations_json, distortions_json, interventions_json)
 
         # Save Segments
         # In production, use executemany for batch inserts
@@ -137,9 +152,10 @@ async def handle_transcript(event: TranscriptReady, msg: RabbitMessage):
         Analyze this therapy transcript. 
         1. Identify the 'therapist' and 'patient'.
         2. For every segment, tag the topic and emotion.
-        3. Create a sentiment trend (time vs score) and a summary.
-        4. Provide a clinical summary.
-        5. Based on the topics that made the patient feel negative, provide a list of recommendations for the therapist for the next session.
+        3. Identify specific 'Cognitive Distortions' in the patient's speech (CBT).
+        4. Identify specific 'Therapeutic Interventions' used by the therapist.
+        5. Provide a clinical summary.
+        6. Based on the topics that made the patient feel negative, provide a list of recommendations for the therapist for the next session.
         
         Transcript: {event.transcript_text}
         """
@@ -148,7 +164,8 @@ async def handle_transcript(event: TranscriptReady, msg: RabbitMessage):
         Your job is to analyze therapy session transcripts to provide clinical insights.
         - Be objective and clinical in your tone.
         - Accurately distinguish between the therapist (who asks questions/guides) and the patient.
-        - For 'sentiment_trend', map emotions to a score between -1.0 (very negative) and 1.0 (very positive).
+        - Cognitive Distortions: Look for patterns like Catastrophizing, All-or-Nothing thinking, Mind Reading.
+        - Interventions: Label techniques like Validation, Reflection, Open Question, Psychoeducation.
         """
 
         # Use Adapter to get clean schema

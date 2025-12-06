@@ -13,8 +13,6 @@ CREATE TABLE analysis_segments (
     video_id UUID REFERENCES videos(id) ON DELETE CASCADE,
     speaker_role TEXT, -- 'therapist' or 'patient'
     text_content TEXT,
-    start_time FLOAT,
-    end_time FLOAT,
     topic TEXT,        
     emotion TEXT,      
     confidence_score FLOAT,
@@ -23,11 +21,11 @@ CREATE TABLE analysis_segments (
 
 -- High-Level Insights Per Video
 CREATE TABLE analysis_summary (
-    video_id UUID REFERENCES videos(id) ON DELETE CASCADE PRIMARY KEY,
-    patient_talk_ratio FLOAT,       
-    sentiment_trend JSONB, -- e.g. [{"time": 10.5, "score": -1}, {"time": 20.0, "score": 1}]
+    video_id UUID REFERENCES videos(id) ON DELETE CASCADE PRIMARY KEY,       
     summary_text TEXT,
     recommendations JSONB,
+    cognitive_distortions JSONB,    
+    therapist_interventions JSONB,
     created_at TIMESTAMP DEFAULT NOW()
 );
 

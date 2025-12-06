@@ -1,7 +1,6 @@
 import os
 import asyncio
 import ffmpeg
-from contextlib import asynccontextmanager
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker, RabbitQueue, RabbitMessage
 from minio import Minio

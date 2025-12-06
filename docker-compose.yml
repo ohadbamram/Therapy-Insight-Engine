@@ -33,6 +33,11 @@ services:
       - minio_data:/data
     networks:
       - therapy_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
 
   postgres:
     image: postgres:15
@@ -87,7 +92,7 @@ services:
       - postgres
       - redis
 
-  # --- Microservices (To be built) ---
+  # --- Microservices ---
   ingestion_service:
     build:
       context: .
@@ -96,8 +101,10 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - rabbitmq
-      - minio
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy 
     env_file: .env
     environment:
       SERVICE_NAME: ingestion_service
@@ -112,8 +119,10 @@ services:
       dockerfile: ./services/audio_extractor/Dockerfile
     container_name: therapy_audio
     depends_on:
-      - rabbitmq
-      - minio
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy 
     env_file: .env
     environment:
       SERVICE_NAME: audio_extractor_service
@@ -128,8 +137,10 @@ services:
       dockerfile: ./services/transcription/Dockerfile
     container_name: therapy_transcription
     depends_on:
-      - rabbitmq
-      - minio
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy 
     env_file: .env
     environment:
       SERVICE_NAME: transcription_service
@@ -144,9 +155,12 @@ services:
       dockerfile: ./services/analyzer/Dockerfile
     container_name: therapy_analyzer
     depends_on:
-      - rabbitmq
-      - postgres
-      - redis
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     env_file: .env
     environment:
       SERVICE_NAME: analyzer_service

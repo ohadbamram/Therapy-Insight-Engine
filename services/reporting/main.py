@@ -31,9 +31,10 @@ class VideoSummary(BaseModel):
 class VideoDetail(BaseModel):
     video_id: str
     summary: Optional[str] = None
-    sentiment_trend: List[Any] = []
     transcript_segments: List[Any] = []
     recommendations: List[str] = []
+    cognitive_distortions: List[Any] = []
+    therapist_interventions: List[Any] = []
 
 # --- Database Helper ---
 async def get_db_connection():
@@ -67,7 +68,7 @@ async def get_video_analysis(video_id: str):
     try:
         # Get Summary & Trend
         summary_row = await conn.fetchrow("""
-            SELECT summary_text, sentiment_trend, recommendations 
+            SELECT summary_text, recommendations, cognitive_distortions, therapist_interventions
             FROM analysis_summary 
             WHERE video_id = $1
         """, video_id)
@@ -90,8 +91,9 @@ async def get_video_analysis(video_id: str):
         return {
             "video_id": video_id,
             "summary": summary_row["summary_text"],
-            "sentiment_trend": json.loads(summary_row["sentiment_trend"]) if summary_row["sentiment_trend"] else [],
             "recommendations": json.loads(summary_row["recommendations"]) if summary_row["recommendations"] else [],
+            "cognitive_distortions": json.loads(summary_row["cognitive_distortions"]) if summary_row["cognitive_distortions"] else [],
+            "therapist_interventions": json.loads(summary_row["therapist_interventions"]) if summary_row["therapist_interventions"] else [],
             "transcript_segments": [dict(row) for row in segments_rows]
         }
     finally:
