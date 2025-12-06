@@ -29,18 +29,20 @@ def mock_dependencies():
     with patch("services.audio_extractor.main.minio_client") as mock_minio, \
          patch("services.audio_extractor.main.ffmpeg") as mock_ffmpeg, \
          patch("services.audio_extractor.main.broker") as mock_broker, \
-         patch("services.audio_extractor.main.os.remove") as mock_os_remove: # Don't delete real files
+         patch("services.audio_extractor.main.os.remove") as mock_os_remove:
         
         # MinIO Mocks
         mock_minio.fget_object = MagicMock()
         mock_minio.fput_object = MagicMock()
         
-        # FFmpeg Mocks (Fluent Interface: input().output().run())
-        # We have to mock the chain: ffmpeg.input(...).output(...).run(...)
+        # FFmpeg Mocks
         mock_stream = MagicMock()
         mock_ffmpeg.input.return_value = mock_stream
         mock_stream.output.return_value = mock_stream
-        # .run() is the final trigger
+        
+        # FIX: Add overwrite_output to the chain so it returns the same mock_stream
+        mock_stream.overwrite_output.return_value = mock_stream
+        
         mock_stream.run = MagicMock()
 
         # Broker Mocks
