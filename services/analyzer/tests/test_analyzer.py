@@ -1,4 +1,5 @@
 import pytest
+import json
 from unittest.mock import MagicMock, AsyncMock, patch
 from common.events import TranscriptReady
 from uuid import uuid4
@@ -35,18 +36,18 @@ def mock_dependencies():
         # Setup Gemini
         mock_response = MagicMock()
         
-        class FakeAnalysis:
-            def __init__(self):
-                self.speaker_role = "patient"
-                self.topic = "sadness"
-                self.emotion = "sad"
-                self.confidence = 0.99
-                self.sentiment_trend = [{"time": 0, "score": -1}]
-                self.summary = "Patient is sad."
-                self.segments = [self]
-                self.model_dump_json = lambda: '{"fake": "json"}'
-        
-        mock_response.parsed = FakeAnalysis()
+        mock_json_string = json.dumps({
+            "video_id": "test_id",
+            "summary": "Patient is sad.",
+            "sentiment_trend": [{"time": 0.0, "score": -1.0}],
+            "segments": [{
+                "speaker_role": "patient",
+                "topic": "sadness",
+                "emotion": "sad",
+                "confidence": 0.99
+            }]
+        })
+        mock_response.text = mock_json_string
         mock_gemini.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
         # Setup Postgres
