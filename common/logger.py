@@ -9,7 +9,29 @@ import os
 import sys
 import logging
 import structlog
-from typing import Any
+from typing import Any , Type
+from types import TracebackType
+
+def handle_exception(
+    exc_type: Type[BaseException], 
+    exc_value: BaseException, 
+    exc_traceback: TracebackType
+) -> None:
+    """
+    Global exception handler to ensure crashes are logged as JSON.
+    This catches unhandled errors and sends them to Datadog.
+    """
+    # Ignore KeyboardInterrupt (Ctrl+C) so we can exit normally
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+
+    # Log the error using the standard logging system
+    # 'exc_info' tells structlog to format the traceback nicely
+    logging.getLogger("root").error(
+        "uncaught_exception",
+        exc_info=(exc_type, exc_value, exc_traceback)
+    )
 
 def get_logger(name: str) -> structlog.BoundLogger:
     """
@@ -43,6 +65,8 @@ def init_logging() -> None:
     Initialize global logging configuration.
     Call this ONCE at the start of your main.py.
     """
+
+    sys.excepthook = handle_exception
     # basicConfig allows standard logging (like from libraries) to be captured
     logging.basicConfig(format="%(message)s", stream=sys.stdout, level=logging.INFO)
 
