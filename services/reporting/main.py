@@ -51,7 +51,7 @@ async def list_videos():
                 v.id::text as video_id, 
                 v.filename, 
                 v.status, 
-                v.created_at::text,
+                (v.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jerusalem')::text as created_at,
                 a.summary_text
             FROM videos v
             LEFT JOIN analysis_summary a ON v.id = a.video_id
