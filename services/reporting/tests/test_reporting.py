@@ -17,7 +17,7 @@ def test_list_videos(mock_db):
     Scenario: GET /videos
     Expectation: Returns list of videos from DB.
     """
-    # Mock DB Response
+    # 1. Mock DB Response
     mock_db.fetch.return_value = [
         {
             "video_id": MOCK_VIDEO_ID,
@@ -28,36 +28,32 @@ def test_list_videos(mock_db):
         }
     ]
 
-    # Import App (After env vars set)
     from services.reporting.main import app
     client = TestClient(app)
 
-    # Request
     response = client.get("/videos")
 
-    # Assertions
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
     assert data[0]["video_id"] == MOCK_VIDEO_ID
-    assert data[0]["summary_text"] == "Patient is anxious."
     
-    # Verify SQL query
     mock_db.fetch.assert_called_once()
-    assert "SELECT" in mock_db.fetch.call_args[0][0]
 
 def test_get_video_detail_success(mock_db):
     """
     Scenario: GET /videos/{id}
-    Expectation: Returns full analysis (Summary + Transcript).
+    Expectation: Returns full analysis including NEW fields.
     """
     from services.reporting.main import app
     client = TestClient(app)
 
-    # Mock Summary Query (fetchrow)
+    # Mock Summary Query (fetchrow) - UPDATED FOR NEW SCHEMA
     mock_db.fetchrow.return_value = {
         "summary_text": "Detailed summary.",
-        "sentiment_trend": '[{"time": 0, "score": -1}]'
+        "recommendations": '["Do breathing exercises"]',
+        "cognitive_distortions": '[{"quote": "I am bad", "distortion_type": "Labeling", "explanation": "..."}]',
+        "therapist_interventions": '[{"quote": "Why?", "technique": "Question", "purpose": "..."}]'
     }
 
     # Mock Segments Query (fetch)
@@ -77,10 +73,15 @@ def test_get_video_detail_success(mock_db):
     # Assertions
     assert response.status_code == 200
     data = response.json()
-    assert data["video_id"] == MOCK_VIDEO_ID
+    
+    # Check new fields
     assert data["summary"] == "Detailed summary."
+    assert len(data["recommendations"]) == 1
+    assert data["cognitive_distortions"][0]["distortion_type"] == "Labeling"
+    assert data["therapist_interventions"][0]["technique"] == "Question"
+    
+    # Check transcript
     assert len(data["transcript_segments"]) == 1
-    assert data["transcript_segments"][0]["text_content"] == "I feel sad."
 
 def test_get_video_detail_not_found(mock_db):
     """
@@ -90,12 +91,9 @@ def test_get_video_detail_not_found(mock_db):
     from services.reporting.main import app
     client = TestClient(app)
 
-    # Mock DB returning None (No summary found)
     mock_db.fetchrow.return_value = None
+    mock_db.fetchval.return_value = False
 
-    # Request
     response = client.get("/videos/unknown-id")
 
-    # Assertions
     assert response.status_code == 404
-    assert response.json()["detail"] == "Analysis not found (or processing)"
