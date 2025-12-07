@@ -163,9 +163,16 @@ async def handle_transcript(event: TranscriptReady, msg: RabbitMessage) -> Any:
         You are an expert clinical psychologist and data analyst. 
         Your job is to analyze therapy session transcripts to provide clinical insights.
         - Be objective and clinical in your tone.
-        - Accurately distinguish between the therapist (who asks questions/guides) and the patient.
-        - Cognitive Distortions: Look for patterns like Catastrophizing, All-or-Nothing thinking, Mind Reading.
-        - Interventions: Label techniques like Validation, Reflection, Open Question, Psychoeducation.
+        
+        DATA FORMATTING RULES:
+        1. **Granularity is King**: You must output a detailed script. Never summarize a conversation into one block. 
+        2. **Split Often**: If a speaker talks for more than 2-3 sentences, split it into a new segment if the topic shifts slightly.
+        3. **Speaker Identification**: accurately label 'therapist' vs 'patient'.
+        
+        CLINICAL TASKS:
+        - Extract deep clinical data.
+        - Cognitive Distortions: Catastrophizing, All-or-Nothing thinking, Mind Reading, etc.
+        - Interventions: Validation, Reflection, Psychoeducation, Open Question, etc.
         """
 
         # Use Adapter to get clean schema
