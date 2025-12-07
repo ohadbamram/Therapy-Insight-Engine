@@ -144,7 +144,15 @@ async def handle_transcript(event: TranscriptReady, msg: RabbitMessage) -> Any:
     cached_data = await redis.get(cache_key)
     if cached_data:
         logger.info("cache_hit", video_id=str(event.video_id))
-        return
+        try:
+            # Get Result from Cache even if It's not in the DB
+            result = FullAnalysis.model_validate_json(cached_data)
+            result.video_id = str(event.video_id)
+            await save_to_postgres(result)
+            logger.info("analysis_restored_from_cache", video_id=str(event.video_id))
+            return
+        except Exception as e:
+            logger.warning("cache_restore_failed", error=str(e), video_id=str(event.video_id))
 
     # Call LLM (If no cache)
     try:
@@ -163,7 +171,7 @@ async def handle_transcript(event: TranscriptReady, msg: RabbitMessage) -> Any:
         You are an expert clinical psychologist and data analyst. 
         Your job is to analyze therapy session transcripts to provide clinical insights.
         - Be objective and clinical in your tone.
-        
+
         DATA FORMATTING RULES:
         1. **Granularity is King**: You must output a detailed script. Never summarize a conversation into one block. 
         2. **Split Often**: If a speaker talks for more than 2-3 sentences, split it into a new segment if the topic shifts slightly.
