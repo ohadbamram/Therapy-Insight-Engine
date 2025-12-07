@@ -38,8 +38,8 @@ def get_logger(name: str) -> structlog.BoundLogger:
     Get a pre-configured logger with context bound.
     """
     # Get environment settings
-    service_name = os.getenv("SERVICE_NAME", "therapy-engine")
-    environment = os.getenv("ENVIRONMENT", "development")
+    service_name = os.getenv("SERVICE_NAME")
+    environment = os.getenv("ENVIRONMENT")
     
     # Just get the logger (configuration happens in init_logging)
     logger = structlog.get_logger(name)
