@@ -42,28 +42,36 @@ The system operates as a fully decoupled pipeline with the following capabilitie
 The system uses a Choreography pattern where services react to events via RabbitMQ.
 
 ```mermaid
-graph TD
-    User([User]) -->|POST /upload| Ingestion[Ingestion Service]
-    Ingestion -->|Save File| MinIO[(MinIO Object Store)]
-    Ingestion -->|Metadata| DB[(PostgreSQL)]
+graph LR
+    %% User interaction
+    User([User]) -->|"POST /upload"| Ingestion[Ingestion Service]
+    User -->|"GET /videos or /video/{id}"| Reporting[Reporting API]
+
+    %% Ingestion flows
+    Ingestion -->|Save file| MinIO[(MinIO Object Store)]
+    Ingestion -->|Save metadata| DB[(PostgreSQL)]
     Ingestion -->|Event: video.uploaded| Rabbit{RabbitMQ}
 
-    Rabbit -->|Consume| Audio[Audio Extractor]
-    Audio -->|Get Video/Save MP3| MinIO
+    %% Audio extraction
+    Rabbit -->|Consume audio.queue| Audio[Audio Extractor Service]
+    Audio -->|Save MP3| MinIO
     Audio -->|Event: audio.extracted| Rabbit
 
-    Rabbit -->|Consume| Transcribe[Transcription Service]
-    Transcribe -->|API Call| AAI[AssemblyAI API]
+    %% Transcription
+    Rabbit -->|Consume transcript.queue| Transcribe[Transcription Service]
+    Transcribe -->|Call AssemblyAI| AAI[AssemblyAI API]
     Transcribe -->|Event: transcript.ready| Rabbit
 
-    Rabbit -->|Consume| Analyzer[Analyzer Service]
+    %% Analysis
+    Rabbit -->|Consume analyzer.queue| Analyzer[Analyzer Service]
     Analyzer -->|Check Cache| Redis[(Redis)]
-    Analyzer -->|Generate Insights| Gemini[Google Gemini LLM]
-    Analyzer -->|Save Results| DB
+    Analyzer -->|Call LLM| Gemini[Google Gemini LLM]
+    Analyzer -->|Save results| DB
 
-    User -->|GET /videos/:id| Reporting[Reporting API]
-    Reporting -->|Query Analysis| DB
+    %% Reporting
+    Reporting -->|Query metadata & results| DB
 ```
+
 
 ## Project Structure
 
