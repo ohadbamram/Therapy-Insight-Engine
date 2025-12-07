@@ -24,7 +24,7 @@ def mock_dependencies():
     with patch("services.transcription.main.minio_client") as mock_minio, \
          patch("services.transcription.main.aai.Transcriber") as mock_transcriber_cls, \
          patch("services.transcription.main.broker") as mock_broker, \
-         patch("services.transcription.main.os.remove") as mock_os_remove:
+         patch("services.transcription.main.os.remove") as _:
         
         # MinIO Mocks
         mock_minio.fget_object = MagicMock()

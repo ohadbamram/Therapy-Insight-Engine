@@ -2,7 +2,7 @@ import os
 import json
 import hashlib
 import asyncpg
-from typing import Any, Type, Awaitable
+from typing import Any, Type
 from redis import asyncio as aioredis
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker, RabbitQueue, RabbitMessage

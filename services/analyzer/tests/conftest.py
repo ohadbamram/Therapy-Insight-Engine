@@ -1,6 +1,5 @@
 import os
 import sys
-import pytest
 
 os.environ["RABBITMQ_USER"] = "guest"
 os.environ["RABBITMQ_PASSWORD"] = "guest"
