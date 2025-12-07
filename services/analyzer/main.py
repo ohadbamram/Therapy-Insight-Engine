@@ -2,6 +2,7 @@ import os
 import json
 import hashlib
 import asyncpg
+from typing import Any, Type, Awaitable
 from redis import asyncio as aioredis
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker, RabbitQueue, RabbitMessage
@@ -75,8 +76,6 @@ class FullAnalysis(BaseModel):
     cognitive_distortions: list[CognitiveDistortion] = Field(default=[])
     therapist_interventions: list[TherapistIntervention] = Field(default=[])
 
-# --- Helpers ---
-from typing import Any, Type
 
 def get_clean_schema(model_class: Type[BaseModel]) -> dict[str, Any]:
     """
@@ -130,11 +129,8 @@ async def save_to_postgres(analysis: FullAnalysis) -> None:
     finally:
         await conn.close()
 
-# --- Message Handler ---
-from typing import Awaitable
-
 @broker.subscriber(RabbitQueue("transcript_ready"))
-async def handle_transcript(event: TranscriptReady, msg: RabbitMessage) -> Awaitable[None]:
+async def handle_transcript(event: TranscriptReady, msg: RabbitMessage) -> Any:
     logger.info("analysis_started", video_id=str(event.video_id))
     
     if not event.transcript_text or not event.transcript_text.strip():
