@@ -154,6 +154,7 @@ services:
       context: .
       dockerfile: ./services/analyzer/Dockerfile
     container_name: therapy_analyzer
+    restart: on-failure
     depends_on:
       rabbitmq:
         condition: service_healthy
