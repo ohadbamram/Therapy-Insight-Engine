@@ -6,6 +6,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from faststream.rabbit import RabbitBroker, RabbitQueue
 from minio import Minio
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator, Dict
 from common.events import VideoUploaded
 from common.logger import init_logging, get_logger
 
@@ -46,7 +47,7 @@ minio_client = Minio(
 )
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Lifespan context manager for startup and shutdown events.
     Code before 'yield' runs on startup.
@@ -76,7 +77,7 @@ app = FastAPI(
 )
 
 @app.post("/upload")
-async def upload_video(file: UploadFile = File(...)):
+async def upload_video(file: UploadFile = File(...)) -> Dict[str, str]:
     """
     1. Generate UUID
     2. Save to MinIO

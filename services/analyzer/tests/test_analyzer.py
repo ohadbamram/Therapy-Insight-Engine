@@ -4,10 +4,11 @@ from unittest.mock import MagicMock, AsyncMock, patch
 from common.events import TranscriptReady
 from uuid import uuid4
 from datetime import datetime, timezone
+from typing import Generator, Tuple
 
 # We define the event payload we expect to receive
 @pytest.fixture
-def sample_event():
+def sample_event() -> TranscriptReady:
     return TranscriptReady(
         video_id=uuid4(),
         transcript_text="I feel sad.",
@@ -16,7 +17,7 @@ def sample_event():
     )
 
 @pytest.fixture
-def mock_rabbit_msg():
+def mock_rabbit_msg() -> MagicMock:
     msg = MagicMock()
     msg.reject = AsyncMock()
     msg.ack = AsyncMock()
@@ -24,7 +25,7 @@ def mock_rabbit_msg():
 
 # We mock all external clients
 @pytest.fixture
-def mock_dependencies():
+def mock_dependencies() -> Generator[Tuple, None, None]:
     with patch("services.analyzer.main.redis") as mock_redis, \
          patch("services.analyzer.main.client") as mock_gemini, \
          patch("services.analyzer.main.asyncpg.connect") as mock_pg_connect:
@@ -65,7 +66,7 @@ def mock_dependencies():
         yield mock_redis, mock_gemini, mock_pg_connect
 
 @pytest.mark.asyncio
-async def test_handle_transcript_cache_miss(mock_dependencies, sample_event, mock_rabbit_msg):
+async def test_handle_transcript_cache_miss(mock_dependencies, sample_event, mock_rabbit_msg) -> None:
     """
     Scenario: New transcript (not in Redis).
     Expectation: Call Gemini -> Save to DB -> Save to Redis.
@@ -93,7 +94,7 @@ async def test_handle_transcript_cache_miss(mock_dependencies, sample_event, moc
     mock_redis.set.assert_called_once()
 
 @pytest.mark.asyncio
-async def test_handle_transcript_cache_hit(mock_dependencies, sample_event, mock_rabbit_msg):
+async def test_handle_transcript_cache_hit(mock_dependencies, sample_event, mock_rabbit_msg) -> None:
     """
     Scenario: Transcript hash found in Redis.
     Expectation: Skip Gemini -> Skip DB -> Log hit.
@@ -109,7 +110,7 @@ async def test_handle_transcript_cache_hit(mock_dependencies, sample_event, mock
     mock_pg_connect.assert_not_called()
 
 @pytest.mark.asyncio
-async def test_gemini_failure(mock_dependencies, sample_event, mock_rabbit_msg):
+async def test_gemini_failure(mock_dependencies, sample_event, mock_rabbit_msg) -> None:
     """
     Scenario: Gemini API crashes.
     Expectation: Log error -> Do NOT save to DB/Redis -> Reject Message.
@@ -127,7 +128,7 @@ async def test_gemini_failure(mock_dependencies, sample_event, mock_rabbit_msg):
     mock_rabbit_msg.reject.assert_awaited_once_with(requeue=False)
 
 @pytest.mark.asyncio
-async def test_handle_malformed_llm_json(mock_dependencies, sample_event, mock_rabbit_msg):
+async def test_handle_malformed_llm_json(mock_dependencies, sample_event, mock_rabbit_msg) -> None:
     """
     Scenario: Gemini returns invalid JSON.
     Expectation: Parse error caught -> Reject Message.
@@ -144,7 +145,7 @@ async def test_handle_malformed_llm_json(mock_dependencies, sample_event, mock_r
     mock_rabbit_msg.reject.assert_awaited_once_with(requeue=False)
 
 @pytest.mark.asyncio
-async def test_handle_empty_transcript(mock_dependencies, sample_event, mock_rabbit_msg):
+async def test_handle_empty_transcript(mock_dependencies, sample_event, mock_rabbit_msg) -> None:
     """
     Scenario: Transcript text is empty string.
     Expectation: Log warning -> Return early -> Do NOT call Gemini.
@@ -159,7 +160,7 @@ async def test_handle_empty_transcript(mock_dependencies, sample_event, mock_rab
     mock_gemini.aio.models.generate_content.assert_not_called()
 
 @pytest.mark.asyncio
-async def test_database_connection_failure(mock_dependencies, sample_event, mock_rabbit_msg):
+async def test_database_connection_failure(mock_dependencies, sample_event, mock_rabbit_msg) -> None:
     """
     Scenario: Postgres is down.
     Expectation: Gemini runs OK -> DB connect fails -> Log Error -> Reject Message.

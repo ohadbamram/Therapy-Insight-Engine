@@ -1,18 +1,19 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
+from typing import Generator
 
 # Mock Data
 MOCK_VIDEO_ID = "d41ae112-e5d2-4736-be32-ac01aac266b5"
 
 @pytest.fixture
-def mock_db():
+def mock_db() -> Generator[AsyncMock, None, None]:
     with patch("services.reporting.main.asyncpg.connect") as mock_connect:
         mock_conn = AsyncMock()
         mock_connect.return_value = mock_conn
         yield mock_conn
 
-def test_list_videos(mock_db):
+def test_list_videos(mock_db) -> None:
     """
     Scenario: GET /videos
     Expectation: Returns list of videos from DB.
@@ -40,7 +41,7 @@ def test_list_videos(mock_db):
     
     mock_db.fetch.assert_called_once()
 
-def test_get_video_detail_success(mock_db):
+def test_get_video_detail_success(mock_db) -> None:
     """
     Scenario: GET /videos/{id}
     Expectation: Returns full analysis including NEW fields.
@@ -83,7 +84,7 @@ def test_get_video_detail_success(mock_db):
     # Check transcript
     assert len(data["transcript_segments"]) == 1
 
-def test_get_video_detail_not_found(mock_db):
+def test_get_video_detail_not_found(mock_db) -> None:
     """
     Scenario: GET /videos/{unknown_id}
     Expectation: 404 Not Found.

@@ -3,6 +3,7 @@ import asyncio
 import assemblyai as aai
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker, RabbitQueue, RabbitMessage
+from typing import Any
 from minio import Minio
 from common.events import AudioExtracted, TranscriptReady
 from common.logger import init_logging, get_logger
@@ -39,7 +40,7 @@ minio_client = Minio(
 # Configure AssemblyAI Global Settings
 aai.settings.api_key = ASSEMBLYAI_API_KEY
 
-def run_transcription(file_path: str):
+def run_transcription(file_path: str) -> Any:
     """
     Synchronous wrapper for AssemblyAI SDK.
     This handles upload + transcription + polling.
@@ -57,7 +58,7 @@ def run_transcription(file_path: str):
     return transcript
 
 @broker.subscriber(RabbitQueue("audio_extracted"))
-async def handle_audio_extracted(event: AudioExtracted, msg: RabbitMessage):
+async def handle_audio_extracted(event: AudioExtracted, msg: RabbitMessage) -> None:
     logger.info("transcription_started", video_id=str(event.video_id))
     
     # We need a temp file because AssemblyAI SDK uploads from disk

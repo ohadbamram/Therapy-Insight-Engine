@@ -3,7 +3,7 @@ import json
 import asyncpg
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 from common.logger import init_logging, get_logger
 
 # Initialize Logging
@@ -37,11 +37,11 @@ class VideoDetail(BaseModel):
     therapist_interventions: List[Any] = []
 
 # --- Database Helper ---
-async def get_db_connection():
+async def get_db_connection() -> asyncpg.Connection:
     return await asyncpg.connect(POSTGRES_URL)
 
 @app.get("/videos", response_model=List[VideoSummary])
-async def list_videos():
+async def list_videos() -> List[Dict[str, Any]]:
     """List all videos with their processing status and summary."""
     conn = await get_db_connection()
     try:
@@ -62,7 +62,7 @@ async def list_videos():
         await conn.close()
 
 @app.get("/videos/{video_id}", response_model=VideoDetail)
-async def get_video_analysis(video_id: str):
+async def get_video_analysis(video_id: str) -> Dict[str, Any]:
     """Get the full analysis (segments + insights) for a specific video."""
     conn = await get_db_connection()
     try:

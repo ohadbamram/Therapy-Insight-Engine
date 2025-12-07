@@ -46,7 +46,7 @@ minio_client = Minio(
     secure=False
 )
 
-def run_ffmpeg(input_path: str, output_path: str):
+def run_ffmpeg(input_path: str, output_path: str) -> None:
     """
     Runs FFmpeg synchronously. 
     We wrap this in to_thread later to avoid blocking the event loop.
@@ -65,7 +65,7 @@ def run_ffmpeg(input_path: str, output_path: str):
         raise RuntimeError(f"FFmpeg failed: {error_log}")
 
 @broker.subscriber(RabbitQueue("video_processing"))
-async def handle_video_uploaded(event: VideoUploaded, msg: RabbitMessage):
+async def handle_video_uploaded(event: VideoUploaded, msg: RabbitMessage) -> None:
     logger.info("audio_extraction_started", video_id=str(event.video_id))
     
     # Define temp file paths

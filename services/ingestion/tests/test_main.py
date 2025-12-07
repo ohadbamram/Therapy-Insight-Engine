@@ -2,13 +2,14 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from fastapi.testclient import TestClient
 from services.ingestion.main import app
+from typing import Generator, Tuple
 
 # Create a TestClient. 
 # We use a context manager in the tests (with TestClient...) to trigger startup/shutdown events.
 client = TestClient(app)
 
 @pytest.fixture
-def mock_dependencies():
+def mock_dependencies() -> Generator[Tuple, None, None]:
     """
     This fixture automatically patches the global broker and minio_client 
     in the main.py file for every test function.
@@ -35,7 +36,7 @@ def mock_dependencies():
 
         yield mock_broker, mock_minio, mock_pg_connect
 
-def test_upload_video_success(mock_dependencies):
+def test_upload_video_success(mock_dependencies) -> None:
     """
     Happy Path: User uploads file -> Saved to MinIO -> Event Published -> 200 OK
     """
@@ -76,7 +77,7 @@ def test_upload_video_success(mock_dependencies):
     assert published_event.filename.endswith("test_video.mp4")
     assert published_event.content_type == "video/mp4"
 
-def test_upload_minio_failure(mock_dependencies):
+def test_upload_minio_failure(mock_dependencies) -> None:
     """
     Error Path: MinIO fails (e.g., network error) -> API returns 500
     """
@@ -100,7 +101,7 @@ def test_upload_minio_failure(mock_dependencies):
     # Verify we NEVER published to RabbitMQ (fail fast)
     mock_broker.publish.assert_not_called()
 
-def test_lifespan_startup(mock_dependencies):
+def test_lifespan_startup(mock_dependencies) -> None:
     """
     Test that startup logic creates buckets and declares queues.
     """

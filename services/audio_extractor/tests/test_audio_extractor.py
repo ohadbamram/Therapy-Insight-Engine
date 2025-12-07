@@ -3,10 +3,11 @@ from unittest.mock import MagicMock, AsyncMock, patch
 from common.events import VideoUploaded
 from uuid import uuid4
 from datetime import datetime, timezone
+from typing import Generator, Tuple
 
 # Sample Input Event
 @pytest.fixture
-def sample_event():
+def sample_event() -> VideoUploaded:
     return VideoUploaded(
         video_id=uuid4(),
         filename="test_video.mp4",
@@ -17,7 +18,7 @@ def sample_event():
 
 # Mock Rabbit Message
 @pytest.fixture
-def mock_rabbit_msg():
+def mock_rabbit_msg() -> MagicMock:
     msg = MagicMock()
     msg.reject = AsyncMock()
     msg.ack = AsyncMock()
@@ -25,24 +26,24 @@ def mock_rabbit_msg():
 
 # Mock Dependencies (MinIO, FFmpeg, Broker)
 @pytest.fixture
-def mock_dependencies():
+def mock_dependencies() -> Generator[Tuple[MagicMock, MagicMock, MagicMock], None, None]:
     with patch("services.audio_extractor.main.minio_client") as mock_minio, \
          patch("services.audio_extractor.main.ffmpeg") as mock_ffmpeg, \
          patch("services.audio_extractor.main.broker") as mock_broker, \
-         patch("services.audio_extractor.main.os.remove") as mock_os_remove:
-        
+         patch("services.audio_extractor.main.os.remove"):
+
         # MinIO Mocks
         mock_minio.fget_object = MagicMock()
         mock_minio.fput_object = MagicMock()
-        
+
         # FFmpeg Mocks
         mock_stream = MagicMock()
         mock_ffmpeg.input.return_value = mock_stream
         mock_stream.output.return_value = mock_stream
-        
-        # FIX: Add overwrite_output to the chain so it returns the same mock_stream
+
+        # Ensure overwrite_output returns the chainable mock_stream
         mock_stream.overwrite_output.return_value = mock_stream
-        
+
         mock_stream.run = MagicMock()
 
         # Broker Mocks
@@ -51,7 +52,7 @@ def mock_dependencies():
         yield mock_minio, mock_ffmpeg, mock_broker
 
 @pytest.mark.asyncio
-async def test_extract_audio_success(mock_dependencies, sample_event, mock_rabbit_msg):
+async def test_extract_audio_success(mock_dependencies, sample_event, mock_rabbit_msg) -> None:
     """
     Happy Path: Download -> Convert -> Upload -> Publish Event
     """
@@ -83,7 +84,7 @@ async def test_extract_audio_success(mock_dependencies, sample_event, mock_rabbi
     assert published_event.audio_path.endswith(".mp3")
 
 @pytest.mark.asyncio
-async def test_ffmpeg_failure(mock_dependencies, sample_event, mock_rabbit_msg):
+async def test_ffmpeg_failure(mock_dependencies, sample_event, mock_rabbit_msg) -> None:
     """
     Scenario: FFmpeg fails (corrupt video).
     Expectation: Log Error -> Reject Message (Don't retry infinitely).
@@ -106,7 +107,7 @@ async def test_ffmpeg_failure(mock_dependencies, sample_event, mock_rabbit_msg):
     mock_rabbit_msg.reject.assert_awaited_once_with(requeue=False)
 
 @pytest.mark.asyncio
-async def test_minio_download_failure(mock_dependencies, sample_event, mock_rabbit_msg):
+async def test_minio_download_failure(mock_dependencies, sample_event, mock_rabbit_msg) -> None:
     """
     Scenario: MinIO download fails (file missing).
     Expectation: Reject Message.

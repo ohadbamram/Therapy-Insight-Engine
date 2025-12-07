@@ -44,19 +44,20 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 
 # --- Data Models for AI Output ---
 class CognitiveDistortion(BaseModel):
-    model_config = ConfigDict(json_schema_extra=lambda s, m: s.pop('additionalProperties', None))
     
+    model_config = ConfigDict(json_schema_extra=lambda s, m: s.pop('additionalProperties', None))
     quote: str = Field(..., description="The exact quote from the patient showing the distortion")
     distortion_type: str = Field(..., description="Type (e.g., Catastrophizing, Mind Reading)")
     explanation: str = Field(..., description="Brief explanation of why this is a distortion")
 
 class TherapistIntervention(BaseModel):
-    model_config = ConfigDict(json_schema_extra=lambda s, m: s.pop('additionalProperties', None))
     
+    model_config = ConfigDict(json_schema_extra=lambda s, m: s.pop('additionalProperties', None))
     quote: str = Field(..., description="The exact quote from the therapist")
     technique: str = Field(..., description="Technique used (e.g., Validation, Open Question)")
     purpose: str = Field(..., description="The intended therapeutic effect")
 class AnalysisResult(BaseModel):
+
     model_config = ConfigDict(extra='forbid')
     text: str = Field(..., description="The exact text content of this segment")
     speaker_role: str = Field(..., description="The role of the speaker: 'therapist' or 'patient'")
@@ -65,6 +66,7 @@ class AnalysisResult(BaseModel):
     confidence: float
 
 class FullAnalysis(BaseModel):
+    
     model_config = ConfigDict(extra='forbid')
     video_id: str = Field(default="") # Filled in after AI generation
     segments: list[AnalysisResult]
@@ -74,14 +76,15 @@ class FullAnalysis(BaseModel):
     therapist_interventions: list[TherapistIntervention] = Field(default=[])
 
 # --- Helpers ---
-def get_clean_schema(model_class):
+from typing import Any, Type
+
+def get_clean_schema(model_class: Type[BaseModel]) -> dict[str, Any]:
     """
     Adapter function: Converts a Pydantic Model into a Gemini-compatible JSON Schema.
     It recursively removes the 'additionalProperties' key which Gemini prohibits.
     """
-    schema = model_class.model_json_schema()
-    
-    def strip_forbidden_keys(d):
+    schema: dict[str, Any] = model_class.model_json_schema()
+    def strip_forbidden_keys(d: Any) -> None:
         if isinstance(d, dict):
             # Gemini forbids 'additionalProperties', so we remove it if found
             if "additionalProperties" in d:
@@ -93,18 +96,17 @@ def get_clean_schema(model_class):
             # Recursively clean lists
             for item in d:
                 strip_forbidden_keys(item)
-    
     strip_forbidden_keys(schema)
     return schema
 
-async def save_to_postgres(analysis: FullAnalysis):
+async def save_to_postgres(analysis: FullAnalysis) -> None:
     """Save the structured analysis to the database."""
-    conn = await asyncpg.connect(POSTGRES_URL)
+    conn: asyncpg.Connection = await asyncpg.connect(POSTGRES_URL)
     try:
         # Convert list of Pydantic models to list of dicts for JSON serialization
-        recommendations_json = json.dumps(analysis.recommendations)
-        distortions_json = json.dumps([d.model_dump() for d in analysis.cognitive_distortions])
-        interventions_json = json.dumps([i.model_dump() for i in analysis.therapist_interventions])
+        recommendations_json: str = json.dumps(analysis.recommendations)
+        distortions_json: str = json.dumps([d.model_dump() for d in analysis.cognitive_distortions])
+        interventions_json: str = json.dumps([i.model_dump() for i in analysis.therapist_interventions])
 
         # Save Summary (Upsert using ON CONFLICT)
         await conn.execute("""
@@ -129,8 +131,10 @@ async def save_to_postgres(analysis: FullAnalysis):
         await conn.close()
 
 # --- Message Handler ---
+from typing import Awaitable
+
 @broker.subscriber(RabbitQueue("transcript_ready"))
-async def handle_transcript(event: TranscriptReady, msg: RabbitMessage):
+async def handle_transcript(event: TranscriptReady, msg: RabbitMessage) -> Awaitable[None]:
     logger.info("analysis_started", video_id=str(event.video_id))
     
     if not event.transcript_text or not event.transcript_text.strip():
