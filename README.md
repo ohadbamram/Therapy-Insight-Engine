@@ -183,7 +183,7 @@ DD_API_KEY=your_datadog_api_key_here
     pip install -r requirements.txt
     ```
 
----
+
 
 ## Running the System
 
@@ -217,6 +217,20 @@ http://localhost:8000/docs
 Use the `POST /upload` endpoint.
 
 Once submitted, you will be redirected inside the GUI to review the request and response.
+
+---
+
+### Viewing Centralized Logs (Datadog)
+
+All services are configured to output structured JSON logs collected and forwarded to Datadog (if you provided the `DD_API_KEY`).
+
+To view logs for the entire system:
+
+1.  Navigate to your **Datadog Log Explorer**.
+2.  Filter the logs using the service name:
+    ```text
+    service:therapy-insight-engine* 
+    ```
 
 ---
 
@@ -275,7 +289,6 @@ Run all tests:
 pytest -q
 ```
 
----
 
 ## Technologies Used
 
@@ -294,7 +307,6 @@ pytest -q
 | Structlog | Structured JSON logs |
 | Docker and Docker Compose | Infrastructure and service orchestration |
 | Pytest, pytest asyncio, httpx, pytest mock | Testing framework and tooling |
-
 ---
 
 ## Acknowledgments
