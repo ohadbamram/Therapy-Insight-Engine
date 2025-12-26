@@ -24,6 +24,7 @@ os.environ["POSTGRES_HOST"] = "mock-postgres"
 # This ensures we can import 'services' and 'common' without path errors
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
+
 @pytest.fixture(autouse=True)
 def mock_env_setup():
     """

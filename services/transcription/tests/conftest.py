@@ -16,6 +16,7 @@ os.environ["ASSEMBLYAI_API_KEY"] = "fake-api-key"
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
+
 @pytest.fixture(autouse=True)
 def mock_env_setup():
     yield

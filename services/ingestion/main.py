@@ -18,14 +18,14 @@ logger = get_logger(__name__)
 app = FastAPI(title="Therapy Ingestion Service")
 
 # Connection Details (From Environment Variables)
-RABBITMQ_USER = os.getenv('RABBITMQ_USER')
-RABBITMQ_PASSWORD = os.getenv('RABBITMQ_PASSWORD')
-RABBITMQ_HOST = os.getenv('RABBITMQ_HOST')
-RABBITMQ_PORT = os.getenv('RABBITMQ_PORT')
-RABBITMQ_VHOST = os.getenv('RABBITMQ_VHOST')
+RABBITMQ_USER = os.getenv("RABBITMQ_USER")
+RABBITMQ_PASSWORD = os.getenv("RABBITMQ_PASSWORD")
+RABBITMQ_HOST = os.getenv("RABBITMQ_HOST")
+RABBITMQ_PORT = os.getenv("RABBITMQ_PORT")
+RABBITMQ_VHOST = os.getenv("RABBITMQ_VHOST")
 RABBITMQ_URL = f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASSWORD}@{RABBITMQ_HOST}:{RABBITMQ_PORT}{RABBITMQ_VHOST}"
-MINIO_HOST = os.getenv('MINIO_HOST')
-MINIO_PORT = os.getenv('MINIO_PORT')
+MINIO_HOST = os.getenv("MINIO_HOST")
+MINIO_PORT = os.getenv("MINIO_PORT")
 MINIO_ENDPOINT = f"{MINIO_HOST}:{MINIO_PORT}"
 MINIO_ACCESS_KEY = os.getenv("MINIO_ROOT_USER")
 MINIO_SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD")
@@ -33,7 +33,7 @@ POSTGRES_USER = os.environ["POSTGRES_USER"]
 POSTGRES_PASSWORD = os.environ["POSTGRES_PASSWORD"]
 POSTGRES_DB = os.environ["POSTGRES_DB"]
 POSTGRES_HOST = os.getenv("POSTGRES_HOST")
-POSTGRES_PORT = os.getenv("POSTGRES_PORT") 
+POSTGRES_PORT = os.getenv("POSTGRES_PORT")
 POSTGRES_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
 # Setup Connections
@@ -43,8 +43,9 @@ minio_client = Minio(
     MINIO_ENDPOINT,
     access_key=MINIO_ACCESS_KEY,
     secret_key=MINIO_SECRET_KEY,
-    secure=False
+    secure=False,
 )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -57,24 +58,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("service_startup")
     await broker.connect()
     await broker.declare_queue(RabbitQueue("video_processing"))
-    
+
     # Ensure MinIO bucket exists
     bucket_name = "videos"
     if not minio_client.bucket_exists(bucket_name):
         minio_client.make_bucket(bucket_name)
         logger.info("bucket_created", bucket=bucket_name)
-    
-    yield # The application runs here
-    
+
+    yield  # The application runs here
+
     # Shutdown Logic
     logger.info("service_shutdown")
     await broker.disconnect()
 
+
 # Initialize FastAPI with lifespan
-app = FastAPI(
-    title="Therapy Ingestion Service",
-    lifespan=lifespan
-)
+app = FastAPI(title="Therapy Ingestion Service", lifespan=lifespan)
+
 
 @app.post("/upload")
 async def upload_video(file: UploadFile = File(...)) -> Dict[str, str]:
@@ -85,7 +85,7 @@ async def upload_video(file: UploadFile = File(...)) -> Dict[str, str]:
     """
     video_id = str(uuid.uuid4())
     file_path = f"{video_id}/{file.filename}"
-    
+
     logger.info("upload_started", video_id=video_id, filename=file.filename)
 
     # Connect to Postgres
@@ -93,38 +93,43 @@ async def upload_video(file: UploadFile = File(...)) -> Dict[str, str]:
 
     try:
         # Save metadata to Postgres
-        await conn.execute("""
+        await conn.execute(
+            """
             INSERT INTO videos (id, filename, minio_path, status)
             VALUES ($1, $2, $3, 'processing')
-        """, video_id, file.filename, file_path)
+        """,
+            video_id,
+            file.filename,
+            file_path,
+        )
 
         # Save file to MinIO
         await asyncio.to_thread(
             minio_client.put_object,
-            "videos", 
-            file_path, 
-            file.file, 
-            length=-1, 
-            part_size=10*1024*1024
+            "videos",
+            file_path,
+            file.file,
+            length=-1,
+            part_size=10 * 1024 * 1024,
         )
-        
+
         # Create Event
         event = VideoUploaded(
-            video_id=video_id, 
+            video_id=video_id,
             filename=file_path,
-            minio_path=file_path, 
-            content_type=file.content_type
+            minio_path=file_path,
+            content_type=file.content_type,
         )
-        
+
         # Publish to RabbitMQ
         await broker.publish(event, queue="video_processing")
-        
+
         logger.info("upload_success", video_id=video_id)
         return {"status": "queued", "video_id": video_id}
 
     except Exception as e:
         logger.error("upload_failed", error=str(e), video_id=video_id)
         raise HTTPException(status_code=500, detail="Upload failed")
-    
+
     finally:
         await conn.close()

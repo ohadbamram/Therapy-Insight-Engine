@@ -4,20 +4,23 @@ from fastapi.testclient import TestClient
 from services.ingestion.main import app
 from typing import Generator, Tuple
 
-# Create a TestClient. 
+# Create a TestClient.
 # We use a context manager in the tests (with TestClient...) to trigger startup/shutdown events.
 client = TestClient(app)
+
 
 @pytest.fixture
 def mock_dependencies() -> Generator[Tuple, None, None]:
     """
-    This fixture automatically patches the global broker and minio_client 
+    This fixture automatically patches the global broker and minio_client
     in the main.py file for every test function.
     """
-    with patch("services.ingestion.main.broker") as mock_broker, \
-         patch("services.ingestion.main.minio_client") as mock_minio, \
-         patch("services.ingestion.main.asyncpg.connect") as mock_pg_connect:
-        
+    with patch("services.ingestion.main.broker") as mock_broker, patch(
+        "services.ingestion.main.minio_client"
+    ) as mock_minio, patch(
+        "services.ingestion.main.asyncpg.connect"
+    ) as mock_pg_connect:
+
         # Setup RabbitMQ Mocks
         mock_broker.connect = AsyncMock()
         mock_broker.disconnect = AsyncMock()
@@ -35,6 +38,7 @@ def mock_dependencies() -> Generator[Tuple, None, None]:
         mock_pg_connect.return_value = mock_conn
 
         yield mock_broker, mock_minio, mock_pg_connect
+
 
 def test_upload_video_success(mock_dependencies) -> None:
     """
@@ -59,13 +63,13 @@ def test_upload_video_success(mock_dependencies) -> None:
 
     # Verify MinIO was called
     mock_minio.put_object.assert_called_once()
-    
+
     # Verify RabbitMQ publish was called
     mock_broker.publish.assert_called_once()
 
     # Verify we tried to save to DB
-    mock_pg_connect.assert_called() # Connection happened
-    mock_pg_connect.return_value.execute.assert_called() # Query executed
+    mock_pg_connect.assert_called()  # Connection happened
+    mock_pg_connect.return_value.execute.assert_called()  # Query executed
 
     # Verify the SQL contained "INSERT INTO videos"
     args, _ = mock_pg_connect.return_value.execute.call_args
@@ -76,6 +80,7 @@ def test_upload_video_success(mock_dependencies) -> None:
     published_event = mock_broker.publish.call_args[0][0]
     assert published_event.filename.endswith("test_video.mp4")
     assert published_event.content_type == "video/mp4"
+
 
 def test_upload_minio_failure(mock_dependencies) -> None:
     """
@@ -101,12 +106,13 @@ def test_upload_minio_failure(mock_dependencies) -> None:
     # Verify we NEVER published to RabbitMQ (fail fast)
     mock_broker.publish.assert_not_called()
 
+
 def test_lifespan_startup(mock_dependencies) -> None:
     """
     Test that startup logic creates buckets and declares queues.
     """
     mock_broker, mock_minio, mock_pg_connect = mock_dependencies
-    
+
     # Set bucket_exists to False so we verify make_bucket is called
     mock_minio.bucket_exists.return_value = False
 

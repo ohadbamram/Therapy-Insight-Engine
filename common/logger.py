@@ -9,13 +9,14 @@ import os
 import sys
 import logging
 import structlog
-from typing import Any , Type
+from typing import Any, Type
 from types import TracebackType
 
+
 def handle_exception(
-    exc_type: Type[BaseException], 
-    exc_value: BaseException, 
-    exc_traceback: TracebackType
+    exc_type: Type[BaseException],
+    exc_value: BaseException,
+    exc_traceback: TracebackType,
 ) -> None:
     """
     Global exception handler to ensure crashes are logged as JSON.
@@ -29,9 +30,9 @@ def handle_exception(
     # Log the error using the standard logging system
     # 'exc_info' tells structlog to format the traceback nicely
     logging.getLogger("root").error(
-        "uncaught_exception",
-        exc_info=(exc_type, exc_value, exc_traceback)
+        "uncaught_exception", exc_info=(exc_type, exc_value, exc_traceback)
     )
+
 
 def get_logger(name: str) -> structlog.BoundLogger:
     """
@@ -40,20 +41,23 @@ def get_logger(name: str) -> structlog.BoundLogger:
     # Get environment settings
     service_name = os.getenv("SERVICE_NAME")
     environment = os.getenv("ENVIRONMENT")
-    
+
     # Just get the logger (configuration happens in init_logging)
     logger = structlog.get_logger(name)
-    
+
     # Bind the standard DataDog tags
     return logger.bind(
         service=service_name,
         environment=environment,
     )
- 
-def bind_request_context(logger: structlog.BoundLogger, **kwargs: Any) -> structlog.BoundLogger:
+
+
+def bind_request_context(
+    logger: structlog.BoundLogger, **kwargs: Any
+) -> structlog.BoundLogger:
     """
     Bind additional context to a logger for the duration of a request.
-    
+
     This is useful for adding request-specific information like video_id,
     user_id, or correlation IDs.
     """
@@ -82,10 +86,10 @@ def init_logging() -> None:
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
             structlog.processors.dict_tracebacks,
-            structlog.processors.JSONRenderer(), # Crucial for DataDog
+            structlog.processors.JSONRenderer(),  # Crucial for DataDog
         ],
         context_class=dict,
-        logger_factory=structlog.stdlib.LoggerFactory(), # Use stdlib factory for better compat
+        logger_factory=structlog.stdlib.LoggerFactory(),  # Use stdlib factory for better compat
         wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
     )

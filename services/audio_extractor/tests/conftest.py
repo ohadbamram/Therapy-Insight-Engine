@@ -15,6 +15,7 @@ os.environ["MINIO_ROOT_PASSWORD"] = "password123"
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
+
 @pytest.fixture(autouse=True)
 def mock_env_setup():
     yield
