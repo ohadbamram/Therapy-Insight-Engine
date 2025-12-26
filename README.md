@@ -81,6 +81,7 @@ Therapy-Insight-Engine/
 ├── .gitignore                  # Git ignore rules
 ├── docker-compose.yml          # Container Orchestration
 ├── init.sql                    # Database Schema Definition
+├── pytest.ini                  # Pytest Configuration (Import Mode)
 ├── requirements.txt            # Python Dependencies
 ├── common/                     # Shared Library
 │   ├── events.py               # Pydantic Event Models
