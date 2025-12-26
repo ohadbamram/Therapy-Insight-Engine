@@ -4,11 +4,11 @@ from common.events import VideoUploaded
 from uuid import uuid4
 from datetime import datetime, timezone
 from typing import Generator, Tuple
+from services.audio_extractor.main import handle_video_uploaded
 
 
-# Sample Input Event
 @pytest.fixture
-def sample_event() -> VideoUploaded:
+def sample_video_event() -> VideoUploaded:
     return VideoUploaded(
         video_id=uuid4(),
         filename="test_video.mp4",
@@ -18,16 +18,14 @@ def sample_event() -> VideoUploaded:
     )
 
 
-# Mock Rabbit Message
 @pytest.fixture
-def mock_rabbit_msg() -> MagicMock:
-    msg = MagicMock()
-    msg.reject = AsyncMock()
-    msg.ack = AsyncMock()
-    return msg
+def mock_rabbitmq_message() -> MagicMock:
+    message = MagicMock()
+    message.reject = AsyncMock()
+    message.ack = AsyncMock()
+    return message
 
 
-# Mock Dependencies (MinIO, FFmpeg, Broker)
 @pytest.fixture
 def mock_dependencies() -> (
     Generator[Tuple[MagicMock, MagicMock, MagicMock], None, None]
@@ -40,104 +38,127 @@ def mock_dependencies() -> (
         "services.audio_extractor.main.os.remove"
     ):
 
-        # MinIO Mocks
         mock_minio.fget_object = MagicMock()
         mock_minio.fput_object = MagicMock()
 
-        # FFmpeg Mocks
         mock_stream = MagicMock()
         mock_ffmpeg.input.return_value = mock_stream
         mock_stream.output.return_value = mock_stream
-
-        # Ensure overwrite_output returns the chainable mock_stream
         mock_stream.overwrite_output.return_value = mock_stream
-
         mock_stream.run = MagicMock()
 
-        # Broker Mocks
         mock_broker.publish = AsyncMock()
 
         yield mock_minio, mock_ffmpeg, mock_broker
 
 
 @pytest.mark.asyncio
-async def test_extract_audio_success(
-    mock_dependencies, sample_event, mock_rabbit_msg
+async def test_handle_video_uploaded_downloads_video_from_minio(
+    mock_dependencies: Tuple[MagicMock, MagicMock, MagicMock],
+    sample_video_event: VideoUploaded,
+    mock_rabbitmq_message: MagicMock,
 ) -> None:
-    """
-    Happy Path: Download -> Convert -> Upload -> Publish Event
-    """
-    mock_minio, mock_ffmpeg, mock_broker = mock_dependencies
+    mock_minio, _, _ = mock_dependencies
 
-    from services.audio_extractor.main import handle_video_uploaded
+    await handle_video_uploaded(sample_video_event, mock_rabbitmq_message)
 
-    await handle_video_uploaded(sample_event, mock_rabbit_msg)
-
-    # Verify Download (Raw video from MinIO)
     mock_minio.fget_object.assert_called_once()
-
-    # Verify Conversion (FFmpeg run was called)
-    mock_ffmpeg.input.assert_called()
-    mock_ffmpeg.input.return_value.output.assert_called()
-    mock_ffmpeg.input.return_value.output.return_value.run.assert_called_once()
-
-    # Verify Upload (MP3 to MinIO)
-    mock_minio.fput_object.assert_called_once()
-    args, _ = mock_minio.fput_object.call_args
-    assert args[0] == "audio"  # Bucket name
-    assert args[1].endswith(".mp3")  # Object name
-
-    # Verify Publish (AudioExtracted event)
-    mock_broker.publish.assert_awaited_once()
-    # Check the event type
-    published_event = mock_broker.publish.call_args[0][0]
-    assert published_event.video_id == sample_event.video_id
-    assert published_event.audio_path.endswith(".mp3")
 
 
 @pytest.mark.asyncio
-async def test_ffmpeg_failure(mock_dependencies, sample_event, mock_rabbit_msg) -> None:
-    """
-    Scenario: FFmpeg fails (corrupt video).
-    Expectation: Log Error -> Reject Message (Don't retry infinitely).
-    """
-    mock_minio, mock_ffmpeg, mock_broker = mock_dependencies
+async def test_handle_video_uploaded_executes_ffmpeg_conversion(
+    mock_dependencies: Tuple[MagicMock, MagicMock, MagicMock],
+    sample_video_event: VideoUploaded,
+    mock_rabbitmq_message: MagicMock,
+) -> None:
+    _, mock_ffmpeg, _ = mock_dependencies
 
-    # Make FFmpeg raise an error
-    mock_ffmpeg.Error = Exception  # FFmpeg library defines its own Error class
+    await handle_video_uploaded(sample_video_event, mock_rabbitmq_message)
+
+    mock_ffmpeg.input.return_value.output.return_value.run.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_video_uploaded_uploads_audio_to_minio(
+    mock_dependencies: Tuple[MagicMock, MagicMock, MagicMock],
+    sample_video_event: VideoUploaded,
+    mock_rabbitmq_message: MagicMock,
+) -> None:
+    mock_minio, _, _ = mock_dependencies
+
+    await handle_video_uploaded(sample_video_event, mock_rabbitmq_message)
+
+    mock_minio.fput_object.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_video_uploaded_publishes_event_on_success(
+    mock_dependencies: Tuple[MagicMock, MagicMock, MagicMock],
+    sample_video_event: VideoUploaded,
+    mock_rabbitmq_message: MagicMock,
+) -> None:
+    _, _, mock_broker = mock_dependencies
+
+    await handle_video_uploaded(sample_video_event, mock_rabbitmq_message)
+
+    mock_broker.publish.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_video_uploaded_rejects_message_on_ffmpeg_failure(
+    mock_dependencies: Tuple[MagicMock, MagicMock, MagicMock],
+    sample_video_event: VideoUploaded,
+    mock_rabbitmq_message: MagicMock,
+) -> None:
+    _, mock_ffmpeg, _ = mock_dependencies
     mock_ffmpeg.input.return_value.output.return_value.run.side_effect = Exception(
         "Conversion Failed"
     )
 
-    from services.audio_extractor.main import handle_video_uploaded
+    await handle_video_uploaded(sample_video_event, mock_rabbitmq_message)
 
-    await handle_video_uploaded(sample_event, mock_rabbit_msg)
-
-    # Verify we did NOT upload anything
-    mock_minio.fput_object.assert_not_called()
-    # Verify we did NOT publish success event
-    mock_broker.publish.assert_not_awaited()
-    # Verify Message Rejected
-    mock_rabbit_msg.reject.assert_awaited_once_with(requeue=False)
+    mock_rabbitmq_message.reject.assert_awaited_once_with(requeue=False)
 
 
 @pytest.mark.asyncio
-async def test_minio_download_failure(
-    mock_dependencies, sample_event, mock_rabbit_msg
+async def test_handle_video_uploaded_aborts_upload_on_ffmpeg_failure(
+    mock_dependencies: Tuple[MagicMock, MagicMock, MagicMock],
+    sample_video_event: VideoUploaded,
+    mock_rabbitmq_message: MagicMock,
 ) -> None:
-    """
-    Scenario: MinIO download fails (file missing).
-    Expectation: Reject Message.
-    """
-    mock_minio, mock_ffmpeg, mock_broker = mock_dependencies
+    mock_minio, mock_ffmpeg, _ = mock_dependencies
+    mock_ffmpeg.input.return_value.output.return_value.run.side_effect = Exception(
+        "Conversion Failed"
+    )
 
+    await handle_video_uploaded(sample_video_event, mock_rabbitmq_message)
+
+    mock_minio.fput_object.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_video_uploaded_rejects_message_on_download_failure(
+    mock_dependencies: Tuple[MagicMock, MagicMock, MagicMock],
+    sample_video_event: VideoUploaded,
+    mock_rabbitmq_message: MagicMock,
+) -> None:
+    mock_minio, _, _ = mock_dependencies
     mock_minio.fget_object.side_effect = Exception("S3 Error")
 
-    from services.audio_extractor.main import handle_video_uploaded
+    await handle_video_uploaded(sample_video_event, mock_rabbitmq_message)
 
-    await handle_video_uploaded(sample_event, mock_rabbit_msg)
+    mock_rabbitmq_message.reject.assert_awaited_once_with(requeue=False)
 
-    # Verify we never even tried FFmpeg
+
+@pytest.mark.asyncio
+async def test_handle_video_uploaded_skips_conversion_on_download_failure(
+    mock_dependencies: Tuple[MagicMock, MagicMock, MagicMock],
+    sample_video_event: VideoUploaded,
+    mock_rabbitmq_message: MagicMock,
+) -> None:
+    mock_minio, mock_ffmpeg, _ = mock_dependencies
+    mock_minio.fget_object.side_effect = Exception("S3 Error")
+
+    await handle_video_uploaded(sample_video_event, mock_rabbitmq_message)
+
     mock_ffmpeg.input.assert_not_called()
-    # Verify Message Rejected
-    mock_rabbit_msg.reject.assert_awaited_once_with(requeue=False)

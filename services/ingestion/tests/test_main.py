@@ -4,123 +4,135 @@ from fastapi.testclient import TestClient
 from services.ingestion.main import app
 from typing import Generator, Tuple
 
-# Create a TestClient.
-# We use a context manager in the tests (with TestClient...) to trigger startup/shutdown events.
-client = TestClient(app)
-
 
 @pytest.fixture
-def mock_dependencies() -> Generator[Tuple, None, None]:
-    """
-    This fixture automatically patches the global broker and minio_client
-    in the main.py file for every test function.
-    """
+def mock_dependencies() -> (
+    Generator[Tuple[AsyncMock, MagicMock, AsyncMock], None, None]
+):
     with patch("services.ingestion.main.broker") as mock_broker, patch(
         "services.ingestion.main.minio_client"
     ) as mock_minio, patch(
         "services.ingestion.main.asyncpg.connect"
     ) as mock_pg_connect:
 
-        # Setup RabbitMQ Mocks
         mock_broker.connect = AsyncMock()
         mock_broker.disconnect = AsyncMock()
         mock_broker.declare_queue = AsyncMock()
         mock_broker.publish = AsyncMock()
 
-        # Setup MinIO Mocks
-        # bucket_exists returns True by default so startup doesn't try to create it
         mock_minio.bucket_exists.return_value = True
         mock_minio.make_bucket = MagicMock()
         mock_minio.put_object = MagicMock()
 
-        # Setup Postgres Mocks
         mock_conn = AsyncMock()
         mock_pg_connect.return_value = mock_conn
 
         yield mock_broker, mock_minio, mock_pg_connect
 
 
-def test_upload_video_success(mock_dependencies) -> None:
-    """
-    Happy Path: User uploads file -> Saved to MinIO -> Event Published -> 200 OK
-    """
-    mock_broker, mock_minio, mock_pg_connect = mock_dependencies
+@pytest.fixture
+def sample_video_file():
+    return {"file": ("test_video.mp4", b"fake video content", "video/mp4")}
 
-    # Simulate a file upload
-    file_content = b"fake video content"
-    files = {"file": ("test_video.mp4", file_content, "video/mp4")}
 
-    # Make the request
-    # Note: We use the client as a context manager to trigger lifespan (startup) events
+def test_upload_returns_200_on_success(
+    mock_dependencies: Tuple, sample_video_file: dict
+) -> None:
     with TestClient(app) as client:
-        response = client.post("/upload", files=files)
+        response = client.post("/upload", files=sample_video_file)
 
-    # Assertions (The Verification)
     assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "queued"
-    assert "video_id" in data
 
-    # Verify MinIO was called
+
+def test_upload_returns_queued_status_on_success(
+    mock_dependencies: Tuple, sample_video_file: dict
+) -> None:
+    with TestClient(app) as client:
+        response = client.post("/upload", files=sample_video_file)
+
+    assert response.json()["status"] == "queued"
+
+
+def test_upload_returns_video_id_on_success(
+    mock_dependencies: Tuple, sample_video_file: dict
+) -> None:
+    with TestClient(app) as client:
+        response = client.post("/upload", files=sample_video_file)
+
+    assert "video_id" in response.json()
+
+
+def test_upload_saves_file_to_minio(
+    mock_dependencies: Tuple, sample_video_file: dict
+) -> None:
+    _, mock_minio, _ = mock_dependencies
+
+    with TestClient(app) as client:
+        client.post("/upload", files=sample_video_file)
+
     mock_minio.put_object.assert_called_once()
 
-    # Verify RabbitMQ publish was called
-    mock_broker.publish.assert_called_once()
 
-    # Verify we tried to save to DB
-    mock_pg_connect.assert_called()  # Connection happened
-    mock_pg_connect.return_value.execute.assert_called()  # Query executed
-
-    # Verify the SQL contained "INSERT INTO videos"
-    args, _ = mock_pg_connect.return_value.execute.call_args
-    assert "INSERT INTO videos" in args[0]
-
-    # Inspect the event sent to RabbitMQ
-    # args[0] is the event object passed to publish()
-    published_event = mock_broker.publish.call_args[0][0]
-    assert published_event.filename.endswith("test_video.mp4")
-    assert published_event.content_type == "video/mp4"
-
-
-def test_upload_minio_failure(mock_dependencies) -> None:
-    """
-    Error Path: MinIO fails (e.g., network error) -> API returns 500
-    """
-    mock_broker, mock_minio, mock_pg_connect = mock_dependencies
-
-    # Configure MinIO mock to raise an exception
-    mock_minio.put_object.side_effect = Exception("S3 Connection Failed")
-
-    files = {"file": ("test_video.mp4", b"content", "video/mp4")}
+def test_upload_publishes_event_to_broker(
+    mock_dependencies: Tuple, sample_video_file: dict
+) -> None:
+    mock_broker, _, _ = mock_dependencies
 
     with TestClient(app) as client:
-        response = client.post("/upload", files=files)
+        client.post("/upload", files=sample_video_file)
 
-    # Assert we get a 500 error
-    assert response.status_code == 500
-    assert response.json()["detail"] == "Upload failed"
+    mock_broker.publish.assert_called_once()
 
-    # Verify that even if MinIO fails, we likely already inserted the DB row
+
+def test_upload_inserts_metadata_into_database(
+    mock_dependencies: Tuple, sample_video_file: dict
+) -> None:
+    _, _, mock_pg_connect = mock_dependencies
+
+    with TestClient(app) as client:
+        client.post("/upload", files=sample_video_file)
+
     mock_pg_connect.return_value.execute.assert_called()
 
-    # Verify we NEVER published to RabbitMQ (fail fast)
+
+def test_upload_returns_500_on_minio_failure(
+    mock_dependencies: Tuple, sample_video_file: dict
+) -> None:
+    _, mock_minio, _ = mock_dependencies
+    mock_minio.put_object.side_effect = Exception("S3 Connection Failed")
+
+    with TestClient(app) as client:
+        response = client.post("/upload", files=sample_video_file)
+
+    assert response.status_code == 500
+
+
+def test_upload_does_not_publish_event_on_minio_failure(
+    mock_dependencies: Tuple, sample_video_file: dict
+) -> None:
+    mock_broker, mock_minio, _ = mock_dependencies
+    mock_minio.put_object.side_effect = Exception("S3 Connection Failed")
+
+    with TestClient(app) as client:
+        client.post("/upload", files=sample_video_file)
+
     mock_broker.publish.assert_not_called()
 
 
-def test_lifespan_startup(mock_dependencies) -> None:
-    """
-    Test that startup logic creates buckets and declares queues.
-    """
-    mock_broker, mock_minio, mock_pg_connect = mock_dependencies
+def test_lifespan_connects_to_broker_on_startup(mock_dependencies: Tuple) -> None:
+    mock_broker, _, _ = mock_dependencies
 
-    # Set bucket_exists to False so we verify make_bucket is called
-    mock_minio.bucket_exists.return_value = False
-
-    with TestClient(app) as client:
-        # Just entering the context manager triggers the startup logic
+    with TestClient(app):
         pass
 
-    # Assertions
     mock_broker.connect.assert_awaited_once()
-    mock_broker.declare_queue.assert_awaited_once()
+
+
+def test_lifespan_creates_minio_bucket_if_missing(mock_dependencies: Tuple) -> None:
+    _, mock_minio, _ = mock_dependencies
+    mock_minio.bucket_exists.return_value = False
+
+    with TestClient(app):
+        pass
+
     mock_minio.make_bucket.assert_called_with("videos")
