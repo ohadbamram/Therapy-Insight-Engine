@@ -202,8 +202,8 @@ docker compose --profile services up -d --build
 | Reporting API | http://localhost:8001/docs |
 | MinIO Console | http://localhost:9001 |
 | RabbitMQ Dashboard | http://localhost:15672 |
-| PostgreSQL | localhost:5432 |
-| Redis | localhost:6379 |
+| PostgreSQL | http://localhost:5432 |
+| Redis | http://localhost:6379 |
 
 ---
 
