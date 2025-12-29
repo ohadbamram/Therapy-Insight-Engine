@@ -5,6 +5,7 @@ A distributed, event-driven microservices architecture for automated analysis of
 ## Table of Contents
 * [Features](#features)
 * [System Architecture](#system-architecture)
+* [Sequence Diagram](#sequence-diagram)
 * [Project Structure](#project-structure)
 * [Prerequisites](#prerequisites)
 * [Configuration](#configuration)
@@ -72,6 +73,58 @@ graph LR
     Reporting -->|Query metadata & results| DB
 ```
 
+## Sequence Diagram
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant Ingestion as Ingestion Service
+    participant MinIO
+    participant DB as PostgreSQL
+    participant RMQ as RabbitMQ
+    participant Audio as Audio Extractor
+    participant Transcribe as Transcription Svc
+    participant Analyzer as Analyzer Svc
+    participant Redis
+
+    %% Upload Phase
+    User->>Ingestion: POST /upload (video.mp4)
+    Ingestion->>MinIO: PutObject (video.mp4)
+    Ingestion->>DB: INSERT video_metadata (status="processing")
+    Ingestion->>RMQ: Publish event "video.uploaded"
+    Ingestion-->>User: 200 OK (video_id)
+
+    %% Audio Extraction Phase
+    RMQ->>Audio: Consume "video.uploaded"
+    Audio->>MinIO: GetObject (video.mp4)
+    Note over Audio: FFmpeg Processing...
+    Audio->>MinIO: PutObject (audio.mp3)
+    Audio->>RMQ: Publish event "audio.extracted"
+
+    %% Transcription Phase
+    RMQ->>Transcribe: Consume "audio.extracted"
+    Transcribe->>MinIO: GetObject (audio.mp3)
+    Transcribe->>Transcribe: Call AssemblyAI API
+    Transcribe->>RMQ: Publish event "transcript.ready"
+
+    %% Analysis Phase
+    RMQ->>Analyzer: Consume "transcript.ready"
+    Analyzer->>Redis: GET transcript_hash
+    alt Cache Hit
+        Redis-->>Analyzer: Return JSON
+    else Cache Miss
+        Analyzer->>Analyzer: Call Google Gemini API
+        Analyzer->>Redis: SET transcript_hash
+    end
+    Analyzer->>DB: INSERT analysis_results
+    Analyzer->>DB: UPDATE video_metadata (status="completed")
+
+    %% Reporting Phase
+    User->>Ingestion: GET /video/{id}
+    Ingestion->>DB: SELECT * FROM analysis_results
+    DB-->>Ingestion: Return Data
+    Ingestion-->>User: Return Clinical Insights JSON
+```
 
 ## Project Structure
 
